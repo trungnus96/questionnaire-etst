@@ -32,9 +32,9 @@ export function processQuestionnaireData({ questionnaire = {} }) {
 }
 
 export function processPreviousQuestionnaireResponse({
-  previous_questionnaire_response = {},
+  questionnaire_response = {},
 } = {}) {
-  const { answers = [] } = previous_questionnaire_response;
+  const { answers = [] } = questionnaire_response;
 
   let previous_answers = {};
   answers.forEach((answer) => {

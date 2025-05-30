@@ -81,6 +81,18 @@ const generateFormSchemaAndDefaults = ({
           invalid_type_error: "Invalid date format.",
         });
         default_values[question.id] = undefined; // Calendar expects undefined or Date
+
+        if (
+          !isEmpty(previous_answers) &&
+          previous_answers[question.id] &&
+          previous_answers[question.id].length > 0 &&
+          moment(previous_answers[question.id][0]).isValid()
+        ) {
+          default_values[question.id] = moment(
+            previous_answers[question.id][0]
+          ).toDate();
+        }
+
         break;
 
       case QuestionsConstants.QUESTION_TYPE_CHECKBOX: // Assuming checkbox stores an array of selected values
@@ -186,19 +198,19 @@ const generateFormSchemaAndDefaults = ({
 
   return {
     schema: z.object(schema_shape),
-    default_values: {
-      ...default_values,
-      personal_full_name: "hello",
-      confirmation_agreement: ["agreed"],
-      // personal_dob: new Date(),
-      lifestyle_alcohol: "no",
-    },
+    default_values,
   };
 };
 
 function Questionnaire(props) {
   // props
-  const { questionnaire = {}, previous_questionnaire_response = {} } = props;
+  const {
+    questionnaire = {},
+    questionnaire_response = {},
+    group_gid = "",
+    corresponding_gid = "",
+  } = props;
+
   const processed_questionnaire = processQuestionnaireData({ questionnaire });
   const {
     questionnaire: questionnaire_data = {},
@@ -206,25 +218,26 @@ function Questionnaire(props) {
     questions = [],
   } = processed_questionnaire;
 
-  let has_previous_response = false;
-  if (
-    !isEmpty(previous_questionnaire_response) &&
-    previous_questionnaire_response.updated_at
-  ) {
-    has_previous_response = true;
-  }
+  const is_submitted =
+    questionnaire_response.corresponding_gid === corresponding_gid &&
+    corresponding_gid !== "";
 
   // hooks
   const [is_submitting, setIsSubmitting] = useState(false);
   const [submission_success, setSubmissionSuccess] = useState(false);
   const [error_message, setErrorMessage] = useState("");
-  const [previous_answers, setPreviousAnswers] = useState({});
-  const [is_show_preview_alert, setIsShowPreviewAlert] = useState(
-    has_previous_response
+  const [previous_answers, setPreviousAnswers] = useState(
+    is_submitted
+      ? processPreviousQuestionnaireResponse({
+          questionnaire_response,
+        })
+      : {}
+  );
+  const [is_show_prefill_alert, setIsShowPrefillAlert] = useState(
+    !is_submitted && isEmpty(previous_answers)
   );
 
   useEffect(() => {
-    console.log(123);
     const { default_values: new_default_values } =
       generateFormSchemaAndDefaults({ questions, previous_answers });
 
@@ -273,6 +286,7 @@ function Questionnaire(props) {
           item_gid: question.g_id,
         };
       }),
+      group_gid,
       customer_email: "trungnus96@gmail.com",
       corresponding_gid: "abc123",
     };
@@ -303,21 +317,16 @@ function Questionnaire(props) {
       return;
     }
 
-    console.log({
-      error_message,
-      api_data,
-    });
-
     setSubmissionSuccess(true);
   };
 
   const prefillAnswers = () => {
     const previous_answers = processPreviousQuestionnaireResponse({
-      previous_questionnaire_response,
+      questionnaire_response,
     });
 
     setPreviousAnswers(previous_answers);
-    setIsShowPreviewAlert(false);
+    setIsShowPrefillAlert(false);
   };
 
   // const handleFillAgain = () => {
@@ -338,15 +347,11 @@ function Questionnaire(props) {
 
   // content render helper
   let prefill_answer_alert = null;
-  if (is_show_preview_alert) {
+  if (is_show_prefill_alert) {
     prefill_answer_alert = (
       <Alert className="max-w-2xl mx-auto shadow-xl mb-4">
         <AlertDescription className="flex items-center justify-between">
-          Prefill your answers from your last submission on{" "}
-          {moment(previous_questionnaire_response.updated_at).format(
-            "dddd, MMMM YYYY"
-          )}{" "}
-          to save time
+          Prefill your answers from your last submission to save time
           <Button onClick={prefillAnswers}>Prefill</Button>
         </AlertDescription>
       </Alert>
@@ -413,7 +418,7 @@ function Questionnaire(props) {
                                   field,
                                   form,
                                   question,
-                                  disabled: is_submitting,
+                                  disabled: is_submitting || is_submitted,
                                 };
 
                                 return (
@@ -451,26 +456,29 @@ function Questionnaire(props) {
                     </Alert>
                   )}
 
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full"
-                  disabled={
-                    is_submitting ||
-                    (!form.formState.isDirty &&
-                      !Object.keys(form.formState.touchedFields).length === 0 &&
-                      !form.formState.isValid)
-                  }
-                >
-                  {is_submitting ? (
-                    <>
-                      <Loader2 className="animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    "Submit"
-                  )}
-                </Button>
+                {!is_submitted && (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full"
+                    disabled={
+                      is_submitting ||
+                      (!form.formState.isDirty &&
+                        !Object.keys(form.formState.touchedFields).length ===
+                          0 &&
+                        !form.formState.isValid)
+                    }
+                  >
+                    {is_submitting ? (
+                      <>
+                        <Loader2 className="animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Submit"
+                    )}
+                  </Button>
+                )}
 
                 {error_message && (
                   <Alert

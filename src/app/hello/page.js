@@ -8,21 +8,51 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Questionnaire from "@/components/Questionnaire";
 
 // services
-import { getQuestionnaire } from "@/services/Questionnaires";
-
-// utilities
-import { isEmpty } from "lodash";
+import {
+  getQuestionnaires,
+  getQuestionnaireResponses,
+} from "@/services/Questionnaires";
 
 export default async function FillQuestionnairePage({ searchParams } = {}) {
-  const { service = "", corresponding_gid = "" } = await searchParams;
-
   const {
-    error_message = "",
-    data: { questionnaire = {}, previous_questionnaire_response = {} } = {},
-  } = await getQuestionnaire({
+    group_gid = "",
+    service = "",
+    corresponding_gid = "",
+  } = await searchParams;
+
+  const { error_message = "", data: { questionnaires = [] } = {} } =
+    await getQuestionnaires({
+      group_gid,
+      service,
+      active: true,
+      page_size: 1,
+      page_index: 0,
+    });
+
+  let questionnaire_response = {};
+  if (questionnaires.length > 0) {
+    const { data: { questionnaire_responses = [] } = {} } =
+      await getQuestionnaireResponses({
+        questionnaire_gid: questionnaires[0].g_id,
+        group_gid,
+        service,
+        corresponding_gid,
+        page_size: 1,
+        page_index: 0,
+      });
+
+    if (questionnaire_responses.length > 0) {
+      questionnaire_response = questionnaire_responses[0];
+    }
+  }
+
+  // constants
+  const shared_props = {
+    group_gid,
     service,
     corresponding_gid,
-  });
+    questionnaire_response,
+  };
 
   // content render helper
   let content = null;
@@ -34,7 +64,7 @@ export default async function FillQuestionnairePage({ searchParams } = {}) {
         <AlertDescription>{error_message}</AlertDescription>
       </Alert>
     );
-  } else if (isEmpty(questionnaire)) {
+  } else if (questionnaires.length === 0) {
     content = (
       <Alert className="max-w-lg m-auto" variant="destructive">
         <AlertTriangle className="h-5 w-5" />
@@ -45,12 +75,8 @@ export default async function FillQuestionnairePage({ searchParams } = {}) {
       </Alert>
     );
   } else {
-    content = (
-      <Questionnaire
-        questionnaire={questionnaire}
-        previous_questionnaire_response={previous_questionnaire_response}
-      />
-    );
+    shared_props.questionnaire = questionnaires[0];
+    content = <Questionnaire {...shared_props} />;
   }
 
   return (

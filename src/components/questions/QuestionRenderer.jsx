@@ -25,13 +25,20 @@ import * as QuestionsConstants from "@/constants/questions";
 
 const QuestionRenderer = (props = {}) => {
   // props
-  const { field = {}, form = {}, question = {}, index = 0 } = props;
+  const {
+    field = {},
+    form = {},
+    question = {},
+    index = 0,
+    disabled = false,
+  } = props;
 
   // constants
   const shared_props = {
     field,
     form,
     question,
+    disabled,
   };
 
   let content = null;
