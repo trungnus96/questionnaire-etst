@@ -66,6 +66,7 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = "";
 
         if (
+          !isEmpty(previous_answers) &&
           previous_answers[question.id] &&
           previous_answers[question.id].length > 0
         ) {
@@ -87,6 +88,7 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = [];
 
         if (
+          !isEmpty(previous_answers) &&
           previous_answers[question.id] &&
           previous_answers[question.id].length > 0
         ) {
@@ -204,22 +206,31 @@ function Questionnaire(props) {
     questions = [],
   } = processed_questionnaire;
 
-  const previous_answers = processPreviousQuestionnaireResponse({
-    previous_questionnaire_response,
-  });
+  let has_previous_response = false;
+  if (
+    !isEmpty(previous_questionnaire_response) &&
+    previous_questionnaire_response.updated_at
+  ) {
+    has_previous_response = true;
+  }
 
   // hooks
   const [is_submitting, setIsSubmitting] = useState(false);
   const [submission_success, setSubmissionSuccess] = useState(false);
   const [error_message, setErrorMessage] = useState("");
+  const [previous_answers, setPreviousAnswers] = useState({});
+  const [is_show_preview_alert, setIsShowPreviewAlert] = useState(
+    has_previous_response
+  );
 
   useEffect(() => {
+    console.log(123);
     const { default_values: new_default_values } =
       generateFormSchemaAndDefaults({ questions, previous_answers });
 
     form.reset(new_default_values); // Reset form with new defaults when data changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [previous_answers]);
 
   // Memoize schema and default values generation
   const { schema, default_values } = useMemo(() => {
@@ -238,6 +249,7 @@ function Questionnaire(props) {
     mode: "onChange", // Validate on change for better UX
   });
 
+  // functions
   const onSubmit = async (data) => {
     setErrorMessage("");
 
@@ -299,6 +311,15 @@ function Questionnaire(props) {
     setSubmissionSuccess(true);
   };
 
+  const prefillAnswers = () => {
+    const previous_answers = processPreviousQuestionnaireResponse({
+      previous_questionnaire_response,
+    });
+
+    setPreviousAnswers(previous_answers);
+    setIsShowPreviewAlert(false);
+  };
+
   // const handleFillAgain = () => {
   //   if (questionnaire_data) {
   //     const { default_values: currentdefault_values } =
@@ -315,137 +336,158 @@ function Questionnaire(props) {
     return <QuestionnaireSuccessMessage />;
   }
 
+  // content render helper
+  let prefill_answer_alert = null;
+  if (is_show_preview_alert) {
+    prefill_answer_alert = (
+      <Alert className="max-w-2xl mx-auto shadow-xl mb-4">
+        <AlertDescription className="flex items-center justify-between">
+          Prefill your answers from your last submission on{" "}
+          {moment(previous_questionnaire_response.updated_at).format(
+            "dddd, MMMM YYYY"
+          )}{" "}
+          to save time
+          <Button onClick={prefillAnswers}>Prefill</Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   return (
-    <Card className="max-w-2xl mx-auto shadow-xl">
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-semibold text-primary">
-          {questionnaire_data.title}
-        </CardTitle>
+    <Fragment>
+      {prefill_answer_alert}
 
-        {questionnaire_data.description && (
-          <CardDescription className="mt-2 whitespace-pre-line">
-            {questionnaire_data.description}
-          </CardDescription>
-        )}
-      </CardHeader>
+      <Card className="max-w-2xl mx-auto shadow-xl">
+        <CardHeader className="text-center">
+          <CardTitle className="text-2xl font-semibold text-primary">
+            {questionnaire_data.title}
+          </CardTitle>
 
-      <Separator className="my-2" />
+          {questionnaire_data.description && (
+            <CardDescription className="mt-2 whitespace-pre-line">
+              {questionnaire_data.description}
+            </CardDescription>
+          )}
+        </CardHeader>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          {sections &&
-            sections.length > 0 &&
-            sections.map((section, index) => {
-              let {
-                g_id = "",
-                title = "",
-                description = "",
-                items: questions = [],
-              } = section;
+        <Separator className="my-2" />
 
-              questions = questions.filter(
-                (question) => question.type !== "TEXT"
-              );
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {sections &&
+              sections.length > 0 &&
+              sections.map((section, index) => {
+                let {
+                  g_id = "",
+                  title = "",
+                  description = "",
+                  items: questions = [],
+                } = section;
 
-              const is_last = index === sections.length - 1;
+                questions = questions.filter(
+                  (question) => question.type !== "TEXT"
+                );
 
-              return (
-                <Fragment key={g_id}>
-                  <CardContent>
-                    <div className="text-md font-semibold mb-4">{title}</div>
+                const is_last = index === sections.length - 1;
 
-                    {description && (
-                      <div className="mb-4 text-sm">{description}</div>
-                    )}
+                return (
+                  <Fragment key={g_id}>
+                    <CardContent>
+                      <div className="text-md font-semibold mb-4">{title}</div>
 
-                    <div className="space-y-8">
-                      {questions.map((question, index) => {
-                        const key = question.reference_id;
+                      {description && (
+                        <div className="mb-4 text-sm">{description}</div>
+                      )}
 
-                        return (
-                          <FormField
-                            key={key}
-                            control={form.control}
-                            name={key}
-                            render={({ field }) => {
-                              const shared_props = {
-                                field,
-                                form,
-                                question,
-                                disabled: is_submitting,
-                              };
+                      <div className="space-y-8">
+                        {questions.map((question, index) => {
+                          const key = question.reference_id;
 
-                              return (
-                                <QuestionRenderer
-                                  {...shared_props}
-                                  index={index}
-                                />
-                              );
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  </CardContent>
+                          return (
+                            <FormField
+                              key={key}
+                              control={form.control}
+                              name={key}
+                              render={({ field }) => {
+                                const shared_props = {
+                                  field,
+                                  form,
+                                  question,
+                                  disabled: is_submitting,
+                                };
 
-                  <Separator className="my-8" />
-                  {/* {is_last && <div className="mb-8"></div>} */}
-                </Fragment>
-              );
-            })}
+                                return (
+                                  <QuestionRenderer
+                                    {...shared_props}
+                                    index={index}
+                                  />
+                                );
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </CardContent>
 
-          <CardContent>
-            <CardFooter className="p-0 flex flex-col items-center">
-              {Object.keys(form.formState.errors).length > 0 &&
-                !form.formState.isValid && (
-                  <Alert variant="destructive" className="mb-6 w-full">
-                    <AlertTriangle className="h-4 w-4" />
+                    <Separator className="my-8" />
+                    {/* {is_last && <div className="mb-8"></div>} */}
+                  </Fragment>
+                );
+              })}
 
-                    <AlertTitle>Validation Errors</AlertTitle>
+            <CardContent>
+              <CardFooter className="p-0 flex flex-col items-center">
+                {Object.keys(form.formState.errors).length > 0 &&
+                  !form.formState.isValid && (
+                    <Alert variant="destructive" className="mb-6 w-full">
+                      <AlertTriangle className="h-4 w-4" />
 
-                    <AlertDescription>
-                      Please correct the highlighted fields above before
-                      submitting.
-                    </AlertDescription>
+                      <AlertTitle>Validation Errors</AlertTitle>
+
+                      <AlertDescription>
+                        Please correct the highlighted fields above before
+                        submitting.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full"
+                  disabled={
+                    is_submitting ||
+                    (!form.formState.isDirty &&
+                      !Object.keys(form.formState.touchedFields).length === 0 &&
+                      !form.formState.isValid)
+                  }
+                >
+                  {is_submitting ? (
+                    <>
+                      <Loader2 className="animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit"
+                  )}
+                </Button>
+
+                {error_message && (
+                  <Alert
+                    variant="destructive"
+                    className="mt-4 w-full error-message"
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error_message}</AlertDescription>
                   </Alert>
                 )}
-
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full"
-                disabled={
-                  is_submitting ||
-                  (!form.formState.isDirty &&
-                    !Object.keys(form.formState.touchedFields).length === 0 &&
-                    !form.formState.isValid)
-                }
-              >
-                {is_submitting ? (
-                  <>
-                    <Loader2 className="animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  "Submit"
-                )}
-              </Button>
-
-              {error_message && (
-                <Alert
-                  variant="destructive"
-                  className="mt-4 w-full error-message"
-                >
-                  <AlertTriangle className="h-5 w-5" />
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>{error_message}</AlertDescription>
-                </Alert>
-              )}
-            </CardFooter>
-          </CardContent>
-        </form>
-      </Form>
-    </Card>
+              </CardFooter>
+            </CardContent>
+          </form>
+        </Form>
+      </Card>
+    </Fragment>
   );
 }
 
