@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, Fragment } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { AlertTriangle } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -27,7 +27,7 @@ import { Loader2 } from "lucide-react";
 
 // components
 import QuestionRenderer from "@/components/questions/QuestionRenderer";
-import QuestionnaireLoadingSkeleton from "@/components/shared/QuestionnaireLoadingSkeleton";
+// import QuestionnaireLoadingSkeleton from "@/components/shared/QuestionnaireLoadingSkeleton";
 import QuestionnaireSuccessMessage from "@/components/shared/QuestionnaireSuccessMessage";
 
 // services
@@ -39,10 +39,16 @@ import * as QuestionsConstants from "@/constants/questions";
 // utilities
 import delay from "delay";
 import { isEmpty } from "lodash";
-import { processQuestionnaireData } from "@/utilities/questionnaires";
+import {
+  processQuestionnaireData,
+  processPreviousQuestionnaireResponse,
+} from "@/utilities/questionnaires";
 
 // Function to generate Zod schema and default values from questionnaire config
-const generateFormSchemaAndDefaults = (questions = []) => {
+const generateFormSchemaAndDefaults = ({
+  questions = [],
+  previous_answers = {},
+} = {}) => {
   const schema_shape = {};
   const default_values = {};
 
@@ -54,8 +60,18 @@ const generateFormSchemaAndDefaults = (questions = []) => {
       case QuestionsConstants.QUESTION_TYPE_INPUT:
       case QuestionsConstants.QUESTION_TYPE_TEXTAREA:
       case QuestionsConstants.QUESTION_TYPE_SIGNATURE:
+      case QuestionsConstants.QUESTION_TYPE_RADIO:
+      case QuestionsConstants.QUESTION_TYPE_SELECT:
         field_schema = z.string();
         default_values[question.id] = "";
+
+        if (
+          previous_answers[question.id] &&
+          previous_answers[question.id].length > 0
+        ) {
+          default_values[question.id] = previous_answers[question.id][0] || "";
+        }
+
         break;
 
       case QuestionsConstants.QUESTION_TYPE_DATE_PICKER:
@@ -66,19 +82,16 @@ const generateFormSchemaAndDefaults = (questions = []) => {
         default_values[question.id] = undefined; // Calendar expects undefined or Date
         break;
 
-      case QuestionsConstants.QUESTION_TYPE_RADIO:
-        field_schema = z.string();
-        default_values[question.id] = "";
-        break;
-
       case QuestionsConstants.QUESTION_TYPE_CHECKBOX: // Assuming checkbox stores an array of selected values
         field_schema = z.array(z.string());
         default_values[question.id] = [];
-        break;
 
-      case QuestionsConstants.QUESTION_TYPE_SELECT: // Assuming checkbox stores an array of selected values
-        field_schema = z.string();
-        default_values[question.id] = "";
+        if (
+          previous_answers[question.id] &&
+          previous_answers[question.id].length > 0
+        ) {
+          default_values[question.id] = previous_answers[question.id] || [];
+        }
         break;
 
       default:
@@ -183,7 +196,7 @@ const generateFormSchemaAndDefaults = (questions = []) => {
 
 function Questionnaire(props) {
   // props
-  const { questionnaire = {} } = props;
+  const { questionnaire = {}, previous_questionnaire_response = {} } = props;
   const processed_questionnaire = processQuestionnaireData({ questionnaire });
   const {
     questionnaire: questionnaire_data = {},
@@ -191,12 +204,22 @@ function Questionnaire(props) {
     questions = [],
   } = processed_questionnaire;
 
+  const previous_answers = processPreviousQuestionnaireResponse({
+    previous_questionnaire_response,
+  });
+
   // hooks
-  const [is_loading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [is_submitting, setIsSubmitting] = useState(false);
   const [submission_success, setSubmissionSuccess] = useState(false);
   const [error_message, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    const { default_values: new_default_values } =
+      generateFormSchemaAndDefaults({ questions, previous_answers });
+
+    form.reset(new_default_values); // Reset form with new defaults when data changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Memoize schema and default values generation
   const { schema, default_values } = useMemo(() => {
@@ -206,7 +229,7 @@ function Questionnaire(props) {
       return { schema: z.object({}), default_values: {} };
     }
 
-    return generateFormSchemaAndDefaults(questions);
+    return generateFormSchemaAndDefaults({ questions, previous_answers });
   }, [questions]);
 
   const form = useForm({
@@ -215,17 +238,7 @@ function Questionnaire(props) {
     mode: "onChange", // Validate on change for better UX
   });
 
-  useEffect(() => {
-    const { default_values: new_default_values } =
-      generateFormSchemaAndDefaults(questions);
-
-    form.reset(new_default_values); // Reset form with new defaults when data changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const onSubmit = async (data) => {
-    // setIsSubmitting(true);
-    setSubmissionSuccess(false);
     setErrorMessage("");
 
     // Transform data if needed (e.g., date formatting)
@@ -286,181 +299,153 @@ function Questionnaire(props) {
     setSubmissionSuccess(true);
   };
 
-  const handleFillAgain = () => {
-    setSubmissionSuccess(false);
-    // Reset the form to its initial default values derived from the current questionnaire_data
-    if (questionnaire_data) {
-      const { default_values: currentdefault_values } =
-        generateFormSchemaAndDefaults(questionnaire_data.questions);
-      form.reset(currentdefault_values);
-    }
-    // Optionally, re-trigger useEffect if you need to simulate a full "reload"
-    // setIsLoading(true); // This would re-run the data fetching timeout
-  };
+  // const handleFillAgain = () => {
+  //   if (questionnaire_data) {
+  //     const { default_values: currentdefault_values } =
+  //       generateFormSchemaAndDefaults({ questions, previous_answers });
+  //     form.reset(currentdefault_values);
+  //   }
+  // };
 
-  if (is_loading) {
-    return <QuestionnaireLoadingSkeleton />;
-  }
-
-  if (error) {
-    return (
-      /* Error UI remains the same */
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Alert variant="destructive" className="max-w-lg">
-          <AlertTriangle className="h-5 w-5" /> <AlertTitle>Error</AlertTitle>
-          <AlertDescription>
-            {error || "An unexpected error occurred."}
-          </AlertDescription>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() => router.reload()}
-          >
-            Try again
-          </Button>
-        </Alert>
-      </div>
-    );
-  }
+  // if (is_loading) {
+  //   return <QuestionnaireLoadingSkeleton />;
+  // }
 
   if (submission_success) {
     return <QuestionnaireSuccessMessage />;
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans py-8 px-4 sm:px-6 lg:px-8 leading-normal">
-      <Card className="max-w-2xl mx-auto shadow-xl">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-semibold text-primary">
-            {questionnaire_data.title}
-          </CardTitle>
+    <Card className="max-w-2xl mx-auto shadow-xl">
+      <CardHeader className="text-center">
+        <CardTitle className="text-2xl font-semibold text-primary">
+          {questionnaire_data.title}
+        </CardTitle>
 
-          {questionnaire_data.description && (
-            <CardDescription className="mt-2 whitespace-pre-line">
-              {questionnaire_data.description}
-            </CardDescription>
-          )}
-        </CardHeader>
+        {questionnaire_data.description && (
+          <CardDescription className="mt-2 whitespace-pre-line">
+            {questionnaire_data.description}
+          </CardDescription>
+        )}
+      </CardHeader>
 
-        <Separator className="my-2" />
+      <Separator className="my-2" />
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {sections &&
-              sections.length > 0 &&
-              sections.map((section, index) => {
-                let {
-                  g_id = "",
-                  title = "",
-                  description = "",
-                  items: questions = [],
-                } = section;
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {sections &&
+            sections.length > 0 &&
+            sections.map((section, index) => {
+              let {
+                g_id = "",
+                title = "",
+                description = "",
+                items: questions = [],
+              } = section;
 
-                questions = questions.filter(
-                  (question) => question.type !== "TEXT"
-                );
+              questions = questions.filter(
+                (question) => question.type !== "TEXT"
+              );
 
-                const is_last = index === sections.length - 1;
+              const is_last = index === sections.length - 1;
 
-                return (
-                  <Fragment key={g_id}>
-                    <CardContent>
-                      <div className="text-md font-semibold mb-4">{title}</div>
+              return (
+                <Fragment key={g_id}>
+                  <CardContent>
+                    <div className="text-md font-semibold mb-4">{title}</div>
 
-                      {description && (
-                        <div className="mb-4 text-sm">{description}</div>
-                      )}
+                    {description && (
+                      <div className="mb-4 text-sm">{description}</div>
+                    )}
 
-                      <div className="space-y-8">
-                        {questions.map((question, index) => {
-                          const key = question.reference_id;
+                    <div className="space-y-8">
+                      {questions.map((question, index) => {
+                        const key = question.reference_id;
 
-                          return (
-                            <FormField
-                              key={key}
-                              control={form.control}
-                              name={key}
-                              render={({ field }) => {
-                                const shared_props = {
-                                  field,
-                                  form,
-                                  question,
-                                  disabled: is_submitting,
-                                };
+                        return (
+                          <FormField
+                            key={key}
+                            control={form.control}
+                            name={key}
+                            render={({ field }) => {
+                              const shared_props = {
+                                field,
+                                form,
+                                question,
+                                disabled: is_submitting,
+                              };
 
-                                return (
-                                  <QuestionRenderer
-                                    {...shared_props}
-                                    index={index}
-                                  />
-                                );
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </CardContent>
+                              return (
+                                <QuestionRenderer
+                                  {...shared_props}
+                                  index={index}
+                                />
+                              );
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </CardContent>
 
-                    <Separator className="my-8" />
-                    {/* {is_last && <div className="mb-8"></div>} */}
-                  </Fragment>
-                );
-              })}
+                  <Separator className="my-8" />
+                  {/* {is_last && <div className="mb-8"></div>} */}
+                </Fragment>
+              );
+            })}
 
-            <CardContent>
-              <CardFooter className="p-0 flex flex-col items-center">
-                {Object.keys(form.formState.errors).length > 0 &&
-                  !form.formState.isValid && (
-                    <Alert variant="destructive" className="mb-6 w-full">
-                      <AlertTriangle className="h-4 w-4" />
+          <CardContent>
+            <CardFooter className="p-0 flex flex-col items-center">
+              {Object.keys(form.formState.errors).length > 0 &&
+                !form.formState.isValid && (
+                  <Alert variant="destructive" className="mb-6 w-full">
+                    <AlertTriangle className="h-4 w-4" />
 
-                      <AlertTitle>Validation Errors</AlertTitle>
+                    <AlertTitle>Validation Errors</AlertTitle>
 
-                      <AlertDescription>
-                        Please correct the highlighted fields above before
-                        submitting.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full"
-                  disabled={
-                    is_submitting ||
-                    (!form.formState.isDirty &&
-                      !Object.keys(form.formState.touchedFields).length === 0 &&
-                      !form.formState.isValid)
-                  }
-                >
-                  {is_submitting ? (
-                    <>
-                      <Loader2 className="animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    "Submit"
-                  )}
-                </Button>
-
-                {error_message && (
-                  <Alert
-                    variant="destructive"
-                    className="mt-4 w-full error-message"
-                  >
-                    <AlertTriangle className="h-5 w-5" />
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{error_message}</AlertDescription>
+                    <AlertDescription>
+                      Please correct the highlighted fields above before
+                      submitting.
+                    </AlertDescription>
                   </Alert>
                 )}
-              </CardFooter>
-            </CardContent>
-          </form>
-        </Form>
-      </Card>
-    </div>
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={
+                  is_submitting ||
+                  (!form.formState.isDirty &&
+                    !Object.keys(form.formState.touchedFields).length === 0 &&
+                    !form.formState.isValid)
+                }
+              >
+                {is_submitting ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit"
+                )}
+              </Button>
+
+              {error_message && (
+                <Alert
+                  variant="destructive"
+                  className="mt-4 w-full error-message"
+                >
+                  <AlertTriangle className="h-5 w-5" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error_message}</AlertDescription>
+                </Alert>
+              )}
+            </CardFooter>
+          </CardContent>
+        </form>
+      </Form>
+    </Card>
   );
 }
 

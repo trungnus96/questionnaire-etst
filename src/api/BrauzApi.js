@@ -3,12 +3,13 @@ import { createAxiosRequest } from "./Axios";
 // constants
 import { BRAUZ_NETLIFY_API_V2 } from "@/constants/env";
 
-export async function getQuestionnaireById() {
+export async function getQuestionnaire({ params = {} } = {}) {
   const url = `${BRAUZ_NETLIFY_API_V2}/thirdparty/questionnaires/get`;
 
   return createAxiosRequest({
     url,
     method: "GET",
+    params,
   });
 }
 

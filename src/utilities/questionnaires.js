@@ -7,7 +7,7 @@ export function processQuestionnaireData({ questionnaire = {} }) {
     const { items = [] } = section;
 
     const mapped_items = items.map((item) => {
-      const { reference_id = "", g_id } = item;
+      const { reference_id = "" } = item;
       return {
         ...item,
         // for form
@@ -29,4 +29,18 @@ export function processQuestionnaireData({ questionnaire = {} }) {
     sections: mapped_sections,
     questions,
   };
+}
+
+export function processPreviousQuestionnaireResponse({
+  previous_questionnaire_response = {},
+} = {}) {
+  const { answers = [] } = previous_questionnaire_response;
+
+  let previous_answers = {};
+  answers.forEach((answer) => {
+    const { reference_id = "", value = [] } = answer;
+    previous_answers[reference_id] = value.filter((v) => v);
+  });
+
+  return previous_answers;
 }

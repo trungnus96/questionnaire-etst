@@ -2,7 +2,13 @@ import axios from "axios";
 
 import isEmpty from "lodash/isEmpty";
 
-export function createAxiosRequest({ url, method, data, headers = {} }) {
+export function createAxiosRequest({
+  url = "",
+  method = "",
+  params = {},
+  data = {},
+  headers = {},
+}) {
   let config = {
     method,
     url,
@@ -16,6 +22,13 @@ export function createAxiosRequest({ url, method, data, headers = {} }) {
     config = {
       ...config,
       data,
+    };
+  }
+
+  if (!isEmpty(params)) {
+    config = {
+      ...config,
+      params,
     };
   }
 

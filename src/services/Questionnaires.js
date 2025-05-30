@@ -4,11 +4,12 @@ import * as BrauzApi from "@/api/BrauzApi";
 // utilities
 import { makeAnAsyncRequest } from "@/utilities/api";
 
-export async function getQuestionnaireById() {
+export async function getQuestionnaire(params = {}) {
   const { data = {}, error_message = "" } = await makeAnAsyncRequest({
     name: "Get Questionnaire By Id",
     is_check_success: false,
-    requestFunction: BrauzApi.getQuestionnaireById,
+    requestFunction: BrauzApi.getQuestionnaire,
+    payload: { params },
   });
 
   return {
