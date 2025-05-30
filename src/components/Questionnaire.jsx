@@ -234,7 +234,7 @@ function Questionnaire(props) {
       : {}
   );
   const [is_show_prefill_alert, setIsShowPrefillAlert] = useState(
-    !is_submitted && isEmpty(previous_answers)
+    !is_submitted && !isEmpty(previous_answers)
   );
 
   useEffect(() => {
