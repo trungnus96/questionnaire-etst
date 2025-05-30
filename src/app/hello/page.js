@@ -1,5 +1,5 @@
 // icons
-import { Send, AlertTriangle, CheckCircle2, CalendarIcon } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 // shadcn/ui components
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -7,27 +7,39 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 // components
 import Questionnaire from "@/components/Questionnaire";
 
-// apis
-import { getQuestionnaireById } from "@/api/BrauzApi";
+// services
+import { getQuestionnaireById } from "@/services/Questionnaires";
+
+// utilities
+import { isEmpty } from "lodash";
 
 export default async function FillQuestionnairePage() {
-  const trung = await getQuestionnaireById();
+  const { error_message = "", data: { questionnaire = {} } = {} } =
+    await getQuestionnaireById();
 
-  const { data: { message = "" } = {} } = trung;
+  // content render helper
+  let content = null;
+  if (error_message) {
+    content = (
+      <Alert className="max-w-lg">
+        <AlertTriangle className="h-5 w-5" />
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>{error_message}</AlertDescription>
+      </Alert>
+    );
+  } else if (isEmpty(questionnaire)) {
+    content = (
+      <Alert className="max-w-lg">
+        <AlertTriangle className="h-5 w-5" />
+        <AlertTitle>Questionnaire Not Found</AlertTitle>
+        <AlertDescription>
+          The questionnaire you are looking for could not be found.
+        </AlertDescription>
+      </Alert>
+    );
+  } else {
+    content = <Questionnaire questionnaire={questionnaire} />;
+  }
 
-  return (
-    <div>
-      {/* <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Alert className="max-w-lg">
-          <AlertTriangle className="h-5 w-5" />
-          <AlertTitle>Questionnaire Not Found</AlertTitle>
-          <AlertDescription>
-            The questionnaire you are looking for could not be found.
-          </AlertDescription>
-        </Alert>
-      </div> */}
-
-      <Questionnaire />
-    </div>
-  );
+  return content;
 }

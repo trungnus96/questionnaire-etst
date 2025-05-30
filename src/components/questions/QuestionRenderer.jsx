@@ -7,6 +7,7 @@ import InputField from "./InputField";
 import TextareaQuestion from "./TextareaQuestion";
 import RadioQuestion from "./RadioQuestion";
 import CheckboxQuestion from "./CheckboxQuestion";
+import SelectQuestion from "./SelectQuestion";
 import DatePickerQuestion from "./DatePickerQuestion";
 import SignatureQuestion from "./SignatureQuestion";
 
@@ -50,6 +51,10 @@ const QuestionRenderer = (props = {}) => {
 
     case QuestionsConstants.QUESTION_TYPE_CHECKBOX:
       content = <CheckboxQuestion {...shared_props} />;
+      break;
+
+    case QuestionsConstants.QUESTION_TYPE_SELECT:
+      content = <SelectQuestion {...shared_props} />;
       break;
 
     case QuestionsConstants.QUESTION_TYPE_DATE_PICKER:

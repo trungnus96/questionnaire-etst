@@ -1,34 +1,31 @@
-export async function makeAsyncRequest(url = "", options = {}) {
+// utilities
+import { readErrorMessageFromError } from "@/utilities";
+
+export async function makeAnAsyncRequest({
+  requestFunction = () => {},
+  payload = {},
+  is_check_success = true,
+  name = "",
+}) {
   try {
-    const response = await fetch(url, {
-      method: options.method || "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-      body: options.body,
-      next: options.next, // Next.js specific revalidation options
-      cache: options.cache, // e.g., 'force-cache', 'no-store'
-      signal: options.signal, // For cancellation
-    });
+    const response = await requestFunction(payload);
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    if (is_check_success === true) {
+      const { status, data } = response;
+      if (status === 200 && data.success) {
+        return response;
+      } else {
+        const message = data && data.message ? data.message : "Unknown error";
+        const error_message = `Error [${status}: ${message}]`;
+
+        return { error_message, status };
+      }
+    } else {
+      return response;
     }
+  } catch (e) {
+    const error_message = readErrorMessageFromError(e);
 
-    const data = await response.json();
-
-    return {
-      data,
-      error_message: "",
-      status: response.status,
-    };
-  } catch (error) {
-    console.error("Fetch error:", error);
-    return {
-      data: {},
-      error_message: error.message || "Unknown error",
-      status: error.status || 500,
-    };
+    return { error_message };
   }
 }

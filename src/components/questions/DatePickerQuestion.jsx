@@ -43,7 +43,7 @@ const DatePickerQuestion = (props = {}) => {
   const setDate = field.onChange;
 
   // hooks
-  const [is_open, setIsOpen] = useState(date);
+  const [is_open, setIsOpen] = useState(false);
 
   const months = [
     "January",

@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, Fragment } from "react";
-import { Send, AlertTriangle, CheckCircle2, CalendarIcon } from "lucide-react";
-import { format, parse } from "date-fns"; // For date formatting and parsing
+import { AlertTriangle } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -19,7 +18,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Form, FormField } from "@/components/ui/form";
-import { cn } from "@/lib/utils";
 
 // libs
 import moment from "moment";
@@ -32,17 +30,21 @@ import QuestionRenderer from "@/components/questions/QuestionRenderer";
 import QuestionnaireLoadingSkeleton from "@/components/shared/QuestionnaireLoadingSkeleton";
 import QuestionnaireSuccessMessage from "@/components/shared/QuestionnaireSuccessMessage";
 
+// services
+import { submitQuestionnaireResponse } from "@/services/Questionnaires";
+
 // constants
 import * as QuestionsConstants from "@/constants/questions";
-import { MOCK_QUESTIONNAIRE } from "@/constants";
 
 // utilities
+import delay from "delay";
 import { isEmpty } from "lodash";
+import { processQuestionnaireData } from "@/utilities/questionnaires";
 
 // Function to generate Zod schema and default values from questionnaire config
-const generateFormSchemaAndDefaults = (questions) => {
+const generateFormSchemaAndDefaults = (questions = []) => {
   const schema_shape = {};
-  const defaultValues = {};
+  const default_values = {};
 
   questions.forEach((question = {}) => {
     let field_schema;
@@ -53,7 +55,7 @@ const generateFormSchemaAndDefaults = (questions) => {
       case QuestionsConstants.QUESTION_TYPE_TEXTAREA:
       case QuestionsConstants.QUESTION_TYPE_SIGNATURE:
         field_schema = z.string();
-        defaultValues[question.id] = "";
+        default_values[question.id] = "";
         break;
 
       case QuestionsConstants.QUESTION_TYPE_DATE_PICKER:
@@ -61,22 +63,27 @@ const generateFormSchemaAndDefaults = (questions) => {
         field_schema = z.date({
           invalid_type_error: "Invalid date format.",
         });
-        defaultValues[question.id] = undefined; // Calendar expects undefined or Date
+        default_values[question.id] = undefined; // Calendar expects undefined or Date
         break;
 
       case QuestionsConstants.QUESTION_TYPE_RADIO:
         field_schema = z.string();
-        defaultValues[question.id] = "";
+        default_values[question.id] = "";
         break;
 
       case QuestionsConstants.QUESTION_TYPE_CHECKBOX: // Assuming checkbox stores an array of selected values
         field_schema = z.array(z.string());
-        defaultValues[question.id] = [];
+        default_values[question.id] = [];
+        break;
+
+      case QuestionsConstants.QUESTION_TYPE_SELECT: // Assuming checkbox stores an array of selected values
+        field_schema = z.string();
+        default_values[question.id] = "";
         break;
 
       default:
         field_schema = z.any(); // Fallback for unknown types
-        defaultValues[question.id] = undefined;
+        default_values[question.id] = "";
     }
 
     // Required validation
@@ -164,8 +171,8 @@ const generateFormSchemaAndDefaults = (questions) => {
 
   return {
     schema: z.object(schema_shape),
-    defaultValues: {
-      ...defaultValues,
+    default_values: {
+      ...default_values,
       personal_full_name: "hello",
       confirmation_agreement: ["agreed"],
       // personal_dob: new Date(),
@@ -174,108 +181,118 @@ const generateFormSchemaAndDefaults = (questions) => {
   };
 };
 
-function Questionnaire() {
+function Questionnaire(props) {
+  // props
+  const { questionnaire = {} } = props;
+  const processed_questionnaire = processQuestionnaireData({ questionnaire });
+  const {
+    questionnaire: questionnaire_data = {},
+    sections = [],
+    questions = [],
+  } = processed_questionnaire;
+
   // hooks
-  const [questionnaire_data, setQuestionnaireData] = useState(null);
-  const [is_loading, setIsLoading] = useState(true);
+  const [is_loading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [is_submitting, setIsSubmitting] = useState(false);
   const [submission_success, setSubmissionSuccess] = useState(false);
+  const [error_message, setErrorMessage] = useState("");
 
   // Memoize schema and default values generation
-  const { schema, defaultValues } = useMemo(() => {
-    if (!questionnaire_data) {
+  const { schema, default_values } = useMemo(() => {
+    if (!questions || questions.length === 0) {
       // Return a placeholder schema/defaults if data isn't loaded yet
       // This helps prevent errors during initial render before useEffect fetches data
-      return { schema: z.object({}), defaultValues: {} };
+      return { schema: z.object({}), default_values: {} };
     }
-    return generateFormSchemaAndDefaults(questionnaire_data.questions);
-  }, [questionnaire_data]);
+
+    return generateFormSchemaAndDefaults(questions);
+  }, [questions]);
 
   const form = useForm({
     resolver: zodResolver(schema),
-    defaultValues: defaultValues, // Set once on mount
+    defaultValues: default_values, // Set once on mount
     mode: "onChange", // Validate on change for better UX
   });
 
-  // Effect to fetch questionnaire data and reset form
   useEffect(() => {
-    if (true) {
-      // Assuming questionnaire_id determines which questionnaire to load
-      setIsLoading(true);
-      setError(null);
-      setSubmissionSuccess(false);
+    const { default_values: new_default_values } =
+      generateFormSchemaAndDefaults(questions);
 
-      // Simulate API call to fetch questionnaire structure
-      setTimeout(() => {
-        const fetchedQuestionnaire = MOCK_QUESTIONNAIRE; // Use the one with validation
-        setQuestionnaireData(fetchedQuestionnaire);
-
-        // Regenerate defaults based on fetched data and reset the form
-        const { defaultValues: newDefaultValues } =
-          generateFormSchemaAndDefaults(fetchedQuestionnaire.questions);
-        form.reset(newDefaultValues); // Reset form with new defaults when data changes
-
-        setIsLoading(false);
-      }, 500);
-    } else {
-      setIsLoading(false); // No ID, so not loading
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // form.reset is stable, no need to add to deps if using useCallback for generateFormSchemaAndDefaults
-
-  // useEffect to update form default values if questionnaire_data changes after initial load
-  // This is crucial if the form is already initialized and then the data/schema changes.
-  useEffect(() => {
-    if (questionnaire_data) {
-      const { defaultValues: newDefaultValues } = generateFormSchemaAndDefaults(
-        questionnaire_data.questions
-      );
-      form.reset(newDefaultValues);
-    }
+    form.reset(new_default_values); // Reset form with new defaults when data changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onSubmit = (data) => {
-    setIsSubmitting(true);
+  const onSubmit = async (data) => {
+    // setIsSubmitting(true);
     setSubmissionSuccess(false);
+    setErrorMessage("");
 
     // Transform data if needed (e.g., date formatting)
     const submission_data = {
-      questionnaire_id: questionnaire_data._id,
-      answers: questionnaire_data.questions.map((question) => {
+      questionnaire_gid: questionnaire_data.g_id,
+      answers: questions.map((question) => {
         let value = data[question.id];
 
         if (
           question.type === QuestionsConstants.QUESTION_TYPE_DATE_PICKER &&
           value instanceof Date
         ) {
-          value = moment(value).valueOf();
+          value = moment(value).format(question.date_format || "DD-MM-YYYY");
         }
 
-        return { question_id: question.id, value };
+        return {
+          reference_id: question.id,
+          value: Array.isArray(value) ? value : [value],
+          section_gid: question.section_gid,
+          item_gid: question.g_id,
+        };
       }),
+      customer_email: "trungnus96@gmail.com",
+      corresponding_gid: "abc123",
     };
 
     console.log("Submitting Form Data:", submission_data);
 
-    // Simulate API Call
-    setTimeout(() => {
-      console.log("Simulated API call for submission successful.");
-      setSubmissionSuccess(true);
-      setIsSubmitting(false);
-      // Optionally reset the form to default values after successful submission
-      // form.reset(defaultValues); // Or fetch new defaults if needed
-    }, 1000 * 3);
+    setIsSubmitting(true);
+    const { error_message = "", data: api_data = {} } =
+      await submitQuestionnaireResponse(submission_data);
+    setIsSubmitting(false);
+
+    if (error_message) {
+      setErrorMessage(error_message);
+
+      await delay(100); // Ensure the DOM is updated before scrolling
+
+      const error_message_el = document.querySelector(".error-message");
+
+      if (error_message_el) {
+        // scroll to error_message_el
+        error_message_el.scrollIntoView({
+          behavior: "smooth",
+          block: "end",
+          inline: "end",
+        });
+      }
+
+      return;
+    }
+
+    console.log({
+      error_message,
+      api_data,
+    });
+
+    setSubmissionSuccess(true);
   };
 
   const handleFillAgain = () => {
     setSubmissionSuccess(false);
     // Reset the form to its initial default values derived from the current questionnaire_data
     if (questionnaire_data) {
-      const { defaultValues: currentDefaultValues } =
+      const { default_values: currentdefault_values } =
         generateFormSchemaAndDefaults(questionnaire_data.questions);
-      form.reset(currentDefaultValues);
+      form.reset(currentdefault_values);
     }
     // Optionally, re-trigger useEffect if you need to simulate a full "reload"
     // setIsLoading(true); // This would re-run the data fetching timeout
@@ -307,27 +324,9 @@ function Questionnaire() {
     );
   }
 
-  if (!questionnaire_data && !is_loading) {
-    return (
-      /* Not Found UI remains the same */
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Alert className="max-w-lg">
-          <AlertTriangle className="h-5 w-5" />
-          <AlertTitle>Questionnaire Not Found</AlertTitle>
-          <AlertDescription>
-            The questionnaire you are looking for could not be found.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   if (submission_success) {
     return <QuestionnaireSuccessMessage />;
   }
-
-  // constants
-  const { sections = [] } = questionnaire_data;
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans py-8 px-4 sm:px-6 lg:px-8 leading-normal">
@@ -351,18 +350,21 @@ function Questionnaire() {
             {sections &&
               sections.length > 0 &&
               sections.map((section, index) => {
-                const {
+                let {
+                  g_id = "",
                   title = "",
                   description = "",
-                  questions = [],
+                  items: questions = [],
                 } = section;
 
-                const id = `section-${index}`;
+                questions = questions.filter(
+                  (question) => question.type !== "TEXT"
+                );
 
                 const is_last = index === sections.length - 1;
 
                 return (
-                  <Fragment key={id}>
+                  <Fragment key={g_id}>
                     <CardContent>
                       <div className="text-md font-semibold mb-4">{title}</div>
 
@@ -371,32 +373,37 @@ function Questionnaire() {
                       )}
 
                       <div className="space-y-8">
-                        {questions.map((question, index) => (
-                          <FormField
-                            key={question.id}
-                            control={form.control}
-                            name={question.id}
-                            render={({ field }) => {
-                              const shared_props = {
-                                field,
-                                form,
-                                question,
-                                disabled: is_submitting,
-                              };
+                        {questions.map((question, index) => {
+                          const key = question.reference_id;
 
-                              return (
-                                <QuestionRenderer
-                                  {...shared_props}
-                                  index={index}
-                                />
-                              );
-                            }}
-                          />
-                        ))}
+                          return (
+                            <FormField
+                              key={key}
+                              control={form.control}
+                              name={key}
+                              render={({ field }) => {
+                                const shared_props = {
+                                  field,
+                                  form,
+                                  question,
+                                  disabled: is_submitting,
+                                };
+
+                                return (
+                                  <QuestionRenderer
+                                    {...shared_props}
+                                    index={index}
+                                  />
+                                );
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     </CardContent>
 
-                    {!is_last && <Separator className="my-8" />}
+                    <Separator className="my-8" />
+                    {/* {is_last && <div className="mb-8"></div>} */}
                   </Fragment>
                 );
               })}
@@ -437,6 +444,17 @@ function Questionnaire() {
                     "Submit"
                   )}
                 </Button>
+
+                {error_message && (
+                  <Alert
+                    variant="destructive"
+                    className="mt-4 w-full error-message"
+                  >
+                    <AlertTriangle className="h-5 w-5" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error_message}</AlertDescription>
+                  </Alert>
+                )}
               </CardFooter>
             </CardContent>
           </form>

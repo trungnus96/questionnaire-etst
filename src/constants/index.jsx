@@ -4,7 +4,7 @@ export const MOCK_QUESTIONNAIRE = {
   description: "Welcome to iKOU Spa!",
   corresponding_gid: "",
   is_active: true,
-  type: "APPOINTMENT",
+  service: "APPOINTMENT",
   associated_booking_types: ["virtual"],
   associated_gids: [],
   associated_entities: ["booking_service", "booking_category"],
@@ -25,12 +25,11 @@ export const MOCK_QUESTIONNAIRE = {
           label: "Full Name",
           type: "INPUT",
           is_required: true,
-          validation: { min_length: 2, max_length: 100 },
+          validation: { min_length: 2, max_length: 100, type: null },
           third_party_id: "full_name",
           clear_value_on_customer_edit: true,
           is_staff_only: false,
           group_gid: "",
-          customer_email: "",
         },
         {
           id: "personal_dob",
@@ -57,7 +56,6 @@ export const MOCK_QUESTIONNAIRE = {
           label: "Email Address",
           type: "INPUT",
           is_required: true,
-
           validation: { type: "email" },
         },
         {
