@@ -20,7 +20,7 @@ import {
   processSubmittedQuestionnaireResponse,
 } from "@/utilities/questionnaires";
 
-export default async function FillQuestionnairePage({ searchParams } = {}) {
+export default async function QuestionnairePage({ searchParams } = {}) {
   const search_params = await searchParams;
 
   const {
