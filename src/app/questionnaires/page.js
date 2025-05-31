@@ -54,19 +54,32 @@ export default async function QuestionnairePage({ searchParams } = {}) {
 
   // get the questionnaire response if it exists
   let submitted_questionnaire_response = {};
+
+  // related_questionnaire_response means the responses that are not related to the current corresponding_gid but are related to the same questionnaire
+  let related_questionnaire_response = {};
+
   if (questionnaires.length > 0) {
-    const { data: { questionnaire_responses = [] } = {} } =
-      await getQuestionnaireResponses({
-        questionnaire_gid: questionnaires[0].g_id,
-        group_gid,
-        service,
-        corresponding_gid,
-        page_size: 1,
-        page_index: 0,
-      });
+    const {
+      data: {
+        questionnaire_responses = [],
+        related_questionnaire_responses = [],
+      } = {},
+    } = await getQuestionnaireResponses({
+      questionnaire_gid: questionnaires[0].g_id,
+      group_gid,
+      service,
+      corresponding_gid,
+      page_size: 1,
+      page_index: 0,
+      include_related_responses: true,
+    });
 
     if (questionnaire_responses.length > 0) {
       submitted_questionnaire_response = questionnaire_responses[0];
+    }
+
+    if (related_questionnaire_responses.length > 0) {
+      related_questionnaire_response = related_questionnaire_responses[0];
     }
   }
 
@@ -115,19 +128,32 @@ export default async function QuestionnairePage({ searchParams } = {}) {
       questionnaire_response: submitted_questionnaire_response,
     });
 
+    const { submitted_answers: related_submitted_answers = {} } =
+      processSubmittedQuestionnaireResponse({
+        questionnaire_response: related_questionnaire_response,
+      });
+
     const shared_props = {
+      search_params,
       questionnaire,
       sections,
       questions,
-      submitted_answers,
       is_submitted,
-      search_params,
+      submitted_answers,
       submitted_questionnaire_response: {
         g_id: submitted_questionnaire_response.g_id,
         created_at: submitted_questionnaire_response.created_at,
         modified_at: submitted_questionnaire_response.modified_at,
       },
-      allow_updating: false,
+      // related_questionnaire_response means the responses that are not related to the current corresponding_gid but are related to the same questionnaire for this customer
+      related_submitted_answers,
+      related_questionnaire_response: {
+        g_id: related_questionnaire_response.g_id,
+        created_at: related_questionnaire_response.created_at,
+        modified_at: related_questionnaire_response.modified_at,
+      },
+      // update after submission
+      allow_updating: true,
     };
 
     content = <Questionnaire {...shared_props} />;

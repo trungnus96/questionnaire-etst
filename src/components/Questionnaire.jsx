@@ -42,12 +42,11 @@ import * as QuestionsConstants from "@/constants/questions";
 // utilities
 import delay from "delay";
 import { isEmpty } from "lodash";
-import { processSubmittedQuestionnaireResponse } from "@/utilities/questionnaires";
 
 // Function to generate Zod schema and default values from questionnaire config
 const generateFormSchemaAndDefaults = ({
   questions = [],
-  submitted_answers = {},
+  prefilled_answers = {},
 } = {}) => {
   const schema_shape = {};
   const default_values = {};
@@ -66,11 +65,11 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = "";
 
         if (
-          !isEmpty(submitted_answers) &&
-          submitted_answers[question.id] &&
-          submitted_answers[question.id].length > 0
+          !isEmpty(prefilled_answers) &&
+          prefilled_answers[question.id] &&
+          prefilled_answers[question.id].length > 0
         ) {
-          default_values[question.id] = submitted_answers[question.id][0] || "";
+          default_values[question.id] = prefilled_answers[question.id][0] || "";
         }
 
         break;
@@ -83,22 +82,20 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = undefined; // Calendar expects undefined or Date
 
         if (
-          !isEmpty(submitted_answers) &&
-          submitted_answers[question.id] &&
-          submitted_answers[question.id].length > 0 &&
+          !isEmpty(prefilled_answers) &&
+          prefilled_answers[question.id] &&
+          prefilled_answers[question.id].length > 0 &&
           moment(
-            submitted_answers[question.id][0],
+            prefilled_answers[question.id][0],
             question.date_format || ""
           ).isValid()
         ) {
           const moment_date = moment(
-            submitted_answers[question.id][0],
-            question.date_format
+            prefilled_answers[question.id][0],
+            question.date_format || ""
           );
 
-          if (moment_date.isValid()) {
-            default_values[question.id] = moment_date.toDate();
-          }
+          default_values[question.id] = moment_date.toDate();
         }
 
         break;
@@ -108,11 +105,11 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = [];
 
         if (
-          !isEmpty(submitted_answers) &&
-          submitted_answers[question.id] &&
-          submitted_answers[question.id].length > 0
+          !isEmpty(prefilled_answers) &&
+          prefilled_answers[question.id] &&
+          prefilled_answers[question.id].length > 0
         ) {
-          default_values[question.id] = submitted_answers[question.id] || [];
+          default_values[question.id] = prefilled_answers[question.id] || [];
         }
         break;
 
@@ -213,13 +210,17 @@ const generateFormSchemaAndDefaults = ({
 function Questionnaire(props) {
   // props
   const {
+    search_params: { group_gid = "", corresponding_gid = "" } = {},
     questionnaire = {},
     sections = [],
     questions = [],
-    submitted_answers: _submitted_answers = {},
     is_submitted = false,
-    search_params: { group_gid = "", corresponding_gid = "" } = {},
+    submitted_answers = {},
     submitted_questionnaire_response = {},
+    // related_questionnaire_response means the responses that are not related to the current corresponding_gid but are related to the same questionnaire for this customer
+    related_submitted_answers = {},
+    related_questionnaire_response = {},
+    // update after submission
     allow_updating = false,
   } = props;
 
@@ -227,20 +228,20 @@ function Questionnaire(props) {
   const [is_submitting, setIsSubmitting] = useState(false);
   const [submission_success, setSubmissionSuccess] = useState(false);
   const [error_message, setErrorMessage] = useState("");
-  const [submitted_answers, setSubmittedAnswers] = useState(
-    is_submitted ? _submitted_answers : {}
+  const [prefilled_answers, setPrefilledAnswers] = useState(
+    is_submitted ? submitted_answers : {}
   );
   const [is_show_prefill_alert, setIsShowPrefillAlert] = useState(
-    !is_submitted && !isEmpty(submitted_answers)
+    !is_submitted && !isEmpty(related_submitted_answers)
   );
 
   useEffect(() => {
     const { default_values: new_default_values } =
-      generateFormSchemaAndDefaults({ questions, submitted_answers });
+      generateFormSchemaAndDefaults({ questions, prefilled_answers });
 
     form.reset(new_default_values); // Reset form with new defaults when data changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted_answers]);
+  }, [questions, prefilled_answers]);
 
   // Memoize schema and default values generation
   const { schema, default_values } = useMemo(() => {
@@ -250,8 +251,8 @@ function Questionnaire(props) {
       return { schema: z.object({}), default_values: {} };
     }
 
-    return generateFormSchemaAndDefaults({ questions, submitted_answers });
-  }, [questions]);
+    return generateFormSchemaAndDefaults({ questions, prefilled_answers });
+  }, [questions, prefilled_answers]);
 
   const form = useForm({
     resolver: zodResolver(schema),
@@ -372,20 +373,9 @@ function Questionnaire(props) {
   };
 
   const prefillAnswers = () => {
-    // const submitted_answers = processSubmittedQuestionnaireResponse({
-    //   questionnaire_response,
-    // });
-    // setSubmittedAnswers(submitted_answers);
-    // setIsShowPrefillAlert(false);
+    setPrefilledAnswers(related_submitted_answers);
+    setIsShowPrefillAlert(false);
   };
-
-  // const handleFillAgain = () => {
-  //   if (questionnaire) {
-  //     const { default_values: currentdefault_values } =
-  //       generateFormSchemaAndDefaults({ questions, submitted_answers });
-  //     form.reset(currentdefault_values);
-  //   }
-  // };
 
   // if (is_loading) {
   //   return <QuestionnaireLoadingSkeleton />;
@@ -409,7 +399,7 @@ function Questionnaire(props) {
     prefill_answer_alert = (
       <Alert className="max-w-2xl mx-auto shadow-xl mb-4">
         <AlertDescription className="flex items-center justify-between">
-          Prefill your answers from your last submission to save time
+          Prefill answers from the last submission to save time
           <Button onClick={prefillAnswers}>Prefill</Button>
         </AlertDescription>
       </Alert>
@@ -433,7 +423,7 @@ function Questionnaire(props) {
     let modified_timestamp = null;
     if (
       submitted_questionnaire_response.modified_at &&
-      moment(submitted_questionnaire_response.modified_at).isBefore(
+      moment(submitted_questionnaire_response.modified_at).isAfter(
         moment(submitted_questionnaire_response.created_at)
       )
     ) {
@@ -568,11 +558,8 @@ function Questionnaire(props) {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full"
-                    disabled={
-                      is_submitting ||
-                      !Object.keys(form.formState.dirtyFields).length > 0
-                    }
+                    className="w-full mb-2"
+                    disabled={is_submitting}
                   >
                     {is_submitting ? (
                       <>
@@ -585,42 +572,42 @@ function Questionnaire(props) {
                   </Button>
                 )}
 
-                {allow_updating && (
-                  <Fragment>
-                    <Button
-                      type="submit"
-                      size="lg"
-                      className="w-full mb-2"
-                      disabled={
-                        is_submitting ||
-                        !Object.keys(form.formState.dirtyFields).length > 0
-                      }
-                      onClick={() => console.log(form.formState.dirtyFields)}
-                    >
-                      {is_submitting ? (
-                        <>
-                          <Loader2 className="animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        "Save changes"
-                      )}
-                    </Button>
+                {is_submitted && allow_updating && (
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="w-full mb-2"
+                    disabled={
+                      is_submitting ||
+                      !Object.keys(form.formState.dirtyFields).length > 0
+                    }
+                  >
+                    {is_submitting ? (
+                      <>
+                        <Loader2 className="animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save changes"
+                    )}
+                  </Button>
+                )}
 
-                    <Button
-                      type="button"
-                      size="lg"
-                      className="w-full"
-                      variant="outline"
-                      disabled={
-                        is_submitting ||
-                        !Object.keys(form.formState.dirtyFields).length > 0
-                      }
-                      onClick={() => form.reset()}
-                    >
-                      Clear changes
-                    </Button>
-                  </Fragment>
+                {(!is_submitted || allow_updating) && (
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="w-full"
+                    variant="outline"
+                    disabled={is_submitting}
+                    onClick={() =>
+                      !is_submitted
+                        ? setPrefilledAnswers({})
+                        : form.reset(default_values)
+                    }
+                  >
+                    Clear changes
+                  </Button>
                 )}
 
                 {error_message && (
