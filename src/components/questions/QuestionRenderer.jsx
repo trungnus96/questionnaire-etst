@@ -101,11 +101,12 @@ const QuestionRenderer = (props = {}) => {
         </div>
       </FormLabel>
 
-      <FormControl>{content}</FormControl>
-
       {question.description && (
         <FormDescription>{question.description}</FormDescription>
       )}
+
+      <FormControl>{content}</FormControl>
+
       <FormMessage />
     </FormItem>
   );
