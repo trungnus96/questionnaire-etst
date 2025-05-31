@@ -330,7 +330,6 @@ function Questionnaire(props) {
       ...submission_data,
       questionnaire_gid: questionnaire.g_id,
       group_gid,
-      customer_email: "trungnus96@gmail.com",
       corresponding_gid,
     };
 
