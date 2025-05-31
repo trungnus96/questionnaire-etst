@@ -31,16 +31,16 @@ export function processQuestionnaireData({ questionnaire = {} }) {
   };
 }
 
-export function processPreviousQuestionnaireResponse({
+export function processSubmittedQuestionnaireResponse({
   questionnaire_response = {},
 } = {}) {
   const { answers = [] } = questionnaire_response;
 
-  let previous_answers = {};
+  let submitted_answers = {};
   answers.forEach((answer) => {
     const { reference_id = "", value = [] } = answer;
-    previous_answers[reference_id] = value.filter((v) => v);
+    submitted_answers[reference_id] = value.filter((v) => v);
   });
 
-  return previous_answers;
+  return { submitted_answers };
 }

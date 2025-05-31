@@ -13,12 +13,35 @@ import {
   getQuestionnaireResponses,
 } from "@/services/Questionnaires";
 
+// utilities
+import { isEmpty } from "lodash";
+import {
+  processQuestionnaireData,
+  processSubmittedQuestionnaireResponse,
+} from "@/utilities/questionnaires";
+
 export default async function FillQuestionnairePage({ searchParams } = {}) {
+  const search_params = await searchParams;
+
   const {
     group_gid = "",
     service = "",
     corresponding_gid = "",
-  } = await searchParams;
+  } = search_params;
+
+  if (!corresponding_gid || !group_gid || !service) {
+    return (
+      <div className="min-h-screen bg-background text-foreground font-sans py-8 px-4 sm:px-6 lg:px-8 leading-normal">
+        <Alert className="max-w-lg m-auto" variant="destructive">
+          <AlertTriangle className="h-5 w-5" />
+          <AlertTitle>Missing Parameters</AlertTitle>
+          <AlertDescription>
+            The required parameters are missing.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   const { error_message = "", data: { questionnaires = [] } = {} } =
     await getQuestionnaires({
@@ -29,7 +52,8 @@ export default async function FillQuestionnairePage({ searchParams } = {}) {
       page_index: 0,
     });
 
-  let questionnaire_response = {};
+  // get the questionnaire response if it exists
+  let submitted_questionnaire_response = {};
   if (questionnaires.length > 0) {
     const { data: { questionnaire_responses = [] } = {} } =
       await getQuestionnaireResponses({
@@ -42,29 +66,33 @@ export default async function FillQuestionnairePage({ searchParams } = {}) {
       });
 
     if (questionnaire_responses.length > 0) {
-      questionnaire_response = questionnaire_responses[0];
+      submitted_questionnaire_response = questionnaire_responses[0];
     }
   }
 
   // constants
-  const shared_props = {
-    group_gid,
-    service,
-    corresponding_gid,
-    questionnaire_response,
-  };
+  const is_submitted = !isEmpty(submitted_questionnaire_response);
+
+  let questionnaire_to_use = questionnaires[0] || {};
+
+  if (
+    submitted_questionnaire_response &&
+    !isEmpty(submitted_questionnaire_response.questionnaire)
+  ) {
+    questionnaire_to_use = submitted_questionnaire_response.questionnaire;
+  }
 
   // content render helper
   let content = null;
   if (error_message) {
     content = (
-      <Alert className="max-w-lg m-auto border-0" variant="destructive">
+      <Alert className="max-w-lg m-auto" variant="destructive">
         <AlertTriangle className="h-5 w-5" />
         <AlertTitle>Error</AlertTitle>
         <AlertDescription>{error_message}</AlertDescription>
       </Alert>
     );
-  } else if (questionnaires.length === 0) {
+  } else if (isEmpty(questionnaire_to_use)) {
     content = (
       <Alert className="max-w-lg m-auto" variant="destructive">
         <AlertTriangle className="h-5 w-5" />
@@ -75,7 +103,33 @@ export default async function FillQuestionnairePage({ searchParams } = {}) {
       </Alert>
     );
   } else {
-    shared_props.questionnaire = questionnaires[0];
+    const {
+      questionnaire = {},
+      sections = [],
+      questions = [],
+    } = processQuestionnaireData({
+      questionnaire: questionnaire_to_use,
+    });
+
+    const { submitted_answers = {} } = processSubmittedQuestionnaireResponse({
+      questionnaire_response: submitted_questionnaire_response,
+    });
+
+    const shared_props = {
+      questionnaire,
+      sections,
+      questions,
+      submitted_answers,
+      is_submitted,
+      search_params,
+      submitted_questionnaire_response: {
+        g_id: submitted_questionnaire_response.g_id,
+        created_at: submitted_questionnaire_response.created_at,
+        modified_at: submitted_questionnaire_response.modified_at,
+      },
+      allow_updating: false,
+    };
+
     content = <Questionnaire {...shared_props} />;
   }
 

@@ -18,6 +18,7 @@ import SignaturePad from "react-signature-canvas";
 
 // utilities
 import { cn } from "@/lib/utils";
+import { compressBase64Image } from "@/utilities";
 
 const SignatureQuestion = (props = {}) => {
   // props
@@ -74,13 +75,17 @@ const SignatureQuestion = (props = {}) => {
             </Button>
             <Button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 if (signature_canvas_ref.current.toData().length > 0) {
-                  field.onChange(
-                    signature_canvas_ref.current
-                      .getTrimmedCanvas()
-                      .toDataURL("image/png")
+                  const base_64_image = signature_canvas_ref.current
+                    .getTrimmedCanvas()
+                    .toDataURL("image/png");
+
+                  const compressed_base_64_image = await compressBase64Image(
+                    base_64_image
                   );
+
+                  field.onChange(compressed_base_64_image);
                 } else {
                   field.onChange("");
                 }

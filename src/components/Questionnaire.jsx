@@ -31,7 +31,10 @@ import QuestionRenderer from "@/components/questions/QuestionRenderer";
 import QuestionnaireSuccessMessage from "@/components/shared/QuestionnaireSuccessMessage";
 
 // services
-import { submitQuestionnaireResponse } from "@/services/Questionnaires";
+import {
+  submitQuestionnaireResponse,
+  updateQuestionnaireResponse,
+} from "@/services/Questionnaires";
 
 // constants
 import * as QuestionsConstants from "@/constants/questions";
@@ -39,15 +42,12 @@ import * as QuestionsConstants from "@/constants/questions";
 // utilities
 import delay from "delay";
 import { isEmpty } from "lodash";
-import {
-  processQuestionnaireData,
-  processPreviousQuestionnaireResponse,
-} from "@/utilities/questionnaires";
+import { processSubmittedQuestionnaireResponse } from "@/utilities/questionnaires";
 
 // Function to generate Zod schema and default values from questionnaire config
 const generateFormSchemaAndDefaults = ({
   questions = [],
-  previous_answers = {},
+  submitted_answers = {},
 } = {}) => {
   const schema_shape = {};
   const default_values = {};
@@ -66,11 +66,11 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = "";
 
         if (
-          !isEmpty(previous_answers) &&
-          previous_answers[question.id] &&
-          previous_answers[question.id].length > 0
+          !isEmpty(submitted_answers) &&
+          submitted_answers[question.id] &&
+          submitted_answers[question.id].length > 0
         ) {
-          default_values[question.id] = previous_answers[question.id][0] || "";
+          default_values[question.id] = submitted_answers[question.id][0] || "";
         }
 
         break;
@@ -83,14 +83,22 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = undefined; // Calendar expects undefined or Date
 
         if (
-          !isEmpty(previous_answers) &&
-          previous_answers[question.id] &&
-          previous_answers[question.id].length > 0 &&
-          moment(previous_answers[question.id][0]).isValid()
+          !isEmpty(submitted_answers) &&
+          submitted_answers[question.id] &&
+          submitted_answers[question.id].length > 0 &&
+          moment(
+            submitted_answers[question.id][0],
+            question.date_format || ""
+          ).isValid()
         ) {
-          default_values[question.id] = moment(
-            previous_answers[question.id][0]
-          ).toDate();
+          const moment_date = moment(
+            submitted_answers[question.id][0],
+            question.date_format
+          );
+
+          if (moment_date.isValid()) {
+            default_values[question.id] = moment_date.toDate();
+          }
         }
 
         break;
@@ -100,11 +108,11 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = [];
 
         if (
-          !isEmpty(previous_answers) &&
-          previous_answers[question.id] &&
-          previous_answers[question.id].length > 0
+          !isEmpty(submitted_answers) &&
+          submitted_answers[question.id] &&
+          submitted_answers[question.id].length > 0
         ) {
-          default_values[question.id] = previous_answers[question.id] || [];
+          default_values[question.id] = submitted_answers[question.id] || [];
         }
         break;
 
@@ -206,44 +214,33 @@ function Questionnaire(props) {
   // props
   const {
     questionnaire = {},
-    questionnaire_response = {},
-    group_gid = "",
-    corresponding_gid = "",
-  } = props;
-
-  const processed_questionnaire = processQuestionnaireData({ questionnaire });
-  const {
-    questionnaire: questionnaire_data = {},
     sections = [],
     questions = [],
-  } = processed_questionnaire;
-
-  const is_submitted =
-    questionnaire_response.corresponding_gid === corresponding_gid &&
-    corresponding_gid !== "";
+    submitted_answers: _submitted_answers = {},
+    is_submitted = false,
+    search_params: { group_gid = "", corresponding_gid = "" } = {},
+    submitted_questionnaire_response = {},
+    allow_updating = false,
+  } = props;
 
   // hooks
   const [is_submitting, setIsSubmitting] = useState(false);
   const [submission_success, setSubmissionSuccess] = useState(false);
   const [error_message, setErrorMessage] = useState("");
-  const [previous_answers, setPreviousAnswers] = useState(
-    is_submitted
-      ? processPreviousQuestionnaireResponse({
-          questionnaire_response,
-        })
-      : {}
+  const [submitted_answers, setSubmittedAnswers] = useState(
+    is_submitted ? _submitted_answers : {}
   );
   const [is_show_prefill_alert, setIsShowPrefillAlert] = useState(
-    !is_submitted && !isEmpty(previous_answers)
+    !is_submitted && !isEmpty(submitted_answers)
   );
 
   useEffect(() => {
     const { default_values: new_default_values } =
-      generateFormSchemaAndDefaults({ questions, previous_answers });
+      generateFormSchemaAndDefaults({ questions, submitted_answers });
 
     form.reset(new_default_values); // Reset form with new defaults when data changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previous_answers]);
+  }, [submitted_answers]);
 
   // Memoize schema and default values generation
   const { schema, default_values } = useMemo(() => {
@@ -253,7 +250,7 @@ function Questionnaire(props) {
       return { schema: z.object({}), default_values: {} };
     }
 
-    return generateFormSchemaAndDefaults({ questions, previous_answers });
+    return generateFormSchemaAndDefaults({ questions, submitted_answers });
   }, [questions]);
 
   const form = useForm({
@@ -266,9 +263,7 @@ function Questionnaire(props) {
   const onSubmit = async (data) => {
     setErrorMessage("");
 
-    // Transform data if needed (e.g., date formatting)
     const submission_data = {
-      questionnaire_gid: questionnaire_data.g_id,
       answers: questions.map((question) => {
         let value = data[question.id];
 
@@ -286,16 +281,26 @@ function Questionnaire(props) {
           item_gid: question.g_id,
         };
       }),
-      group_gid,
-      customer_email: "trungnus96@gmail.com",
-      corresponding_gid: "abc123",
     };
 
-    console.log("Submitting Form Data:", submission_data);
-
     setIsSubmitting(true);
-    const { error_message = "", data: api_data = {} } =
-      await submitQuestionnaireResponse(submission_data);
+
+    let api_response = {};
+
+    if (!is_submitted) {
+      // POST - submitResponse
+      api_response = await submitResponse({
+        submission_data,
+      });
+    } else {
+      // PUT - updateResponse
+      api_response = await updateResponse({
+        submission_data,
+      });
+    }
+
+    const { error_message = "", data: api_data = {} } = api_response;
+
     setIsSubmitting(false);
 
     if (error_message) {
@@ -320,19 +325,65 @@ function Questionnaire(props) {
     setSubmissionSuccess(true);
   };
 
-  const prefillAnswers = () => {
-    const previous_answers = processPreviousQuestionnaireResponse({
-      questionnaire_response,
-    });
+  const submitResponse = async ({ submission_data = {} } = {}) => {
+    submission_data = {
+      ...submission_data,
+      questionnaire_gid: questionnaire.g_id,
+      group_gid,
+      customer_email: "trungnus96@gmail.com",
+      corresponding_gid,
+    };
 
-    setPreviousAnswers(previous_answers);
-    setIsShowPrefillAlert(false);
+    console.log("Submitting Form Data:", submission_data);
+
+    const { error_message = "", data = {} } = await submitQuestionnaireResponse(
+      submission_data
+    );
+
+    return {
+      error_message,
+      data,
+    };
+  };
+
+  const updateResponse = async ({ submission_data = {} } = {}) => {
+    const { answers = [] } = submission_data;
+
+    const dirty_fields_names = Object.keys(form.formState.dirtyFields);
+
+    const answers_to_be_updated = answers.filter((answer) =>
+      dirty_fields_names.includes(answer.reference_id)
+    );
+
+    submission_data = {
+      g_id: submitted_questionnaire_response.g_id,
+      answers: answers_to_be_updated,
+    };
+
+    console.log("Submitting Form Data:", submission_data);
+
+    const { error_message = "", data = {} } = await updateQuestionnaireResponse(
+      submission_data
+    );
+
+    return {
+      error_message,
+      data,
+    };
+  };
+
+  const prefillAnswers = () => {
+    // const submitted_answers = processSubmittedQuestionnaireResponse({
+    //   questionnaire_response,
+    // });
+    // setSubmittedAnswers(submitted_answers);
+    // setIsShowPrefillAlert(false);
   };
 
   // const handleFillAgain = () => {
-  //   if (questionnaire_data) {
+  //   if (questionnaire) {
   //     const { default_values: currentdefault_values } =
-  //       generateFormSchemaAndDefaults({ questions, previous_answers });
+  //       generateFormSchemaAndDefaults({ questions, submitted_answers });
   //     form.reset(currentdefault_values);
   //   }
   // };
@@ -342,7 +393,15 @@ function Questionnaire(props) {
   // }
 
   if (submission_success) {
-    return <QuestionnaireSuccessMessage />;
+    return (
+      <QuestionnaireSuccessMessage
+        message={
+          is_submitted
+            ? "Your response has been updated successfully!"
+            : "Your response has been submitted successfully!"
+        }
+      />
+    );
   }
 
   // content render helper
@@ -358,6 +417,45 @@ function Questionnaire(props) {
     );
   }
 
+  let questionnaire_timestamp = null;
+  if (
+    !isEmpty(submitted_questionnaire_response) &&
+    submitted_questionnaire_response.created_at
+  ) {
+    const submitted_timestamp = (
+      <div className="max-w-2xl mx-auto mt-1 text-xs text-gray-400 flex justify-end">
+        Last submitted:{" "}
+        {moment(submitted_questionnaire_response.created_at).format(
+          "DD-MM-YYYY HH:mm:ss"
+        )}
+      </div>
+    );
+
+    let modified_timestamp = null;
+    if (
+      submitted_questionnaire_response.modified_at &&
+      moment(submitted_questionnaire_response.modified_at).isBefore(
+        moment(submitted_questionnaire_response.created_at)
+      )
+    ) {
+      modified_timestamp = (
+        <div className="max-w-2xl mx-auto mt-1 text-xs text-gray-400 flex justify-end">
+          Last updated:{" "}
+          {moment(submitted_questionnaire_response.modified_at).format(
+            "DD-MM-YYYY HH:mm:ss"
+          )}
+        </div>
+      );
+    }
+
+    questionnaire_timestamp = (
+      <Fragment>
+        {submitted_timestamp}
+        {modified_timestamp}
+      </Fragment>
+    );
+  }
+
   return (
     <Fragment>
       {prefill_answer_alert}
@@ -365,12 +463,12 @@ function Questionnaire(props) {
       <Card className="max-w-2xl mx-auto shadow-xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-semibold text-primary">
-            {questionnaire_data.title}
+            {questionnaire.title}
           </CardTitle>
 
-          {questionnaire_data.description && (
+          {questionnaire.description && (
             <CardDescription className="mt-2 whitespace-pre-line">
-              {questionnaire_data.description}
+              {questionnaire.description}
             </CardDescription>
           )}
         </CardHeader>
@@ -381,22 +479,18 @@ function Questionnaire(props) {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             {sections &&
               sections.length > 0 &&
-              sections.map((section, index) => {
-                let {
+              sections.map((section) => {
+                const {
                   g_id = "",
                   title = "",
                   description = "",
                   items: questions = [],
                 } = section;
 
-                questions = questions.filter(
-                  (question) => question.type !== "TEXT"
-                );
-
-                const is_last = index === sections.length - 1;
-
                 return (
                   <Fragment key={g_id}>
+                    <CardContent></CardContent>
+
                     <CardContent>
                       <div className="text-md font-semibold mb-4">{title}</div>
 
@@ -408,6 +502,20 @@ function Questionnaire(props) {
                         {questions.map((question, index) => {
                           const key = question.reference_id;
 
+                          if (
+                            question.type ===
+                            QuestionsConstants.QUESTION_TYPE_CONTENT
+                          ) {
+                            return (
+                              <div
+                                key={key}
+                                dangerouslySetInnerHTML={{
+                                  __html: question.label,
+                                }}
+                              ></div>
+                            );
+                          }
+
                           return (
                             <FormField
                               key={key}
@@ -418,7 +526,9 @@ function Questionnaire(props) {
                                   field,
                                   form,
                                   question,
-                                  disabled: is_submitting || is_submitted,
+                                  disabled:
+                                    is_submitting ||
+                                    (is_submitted && !allow_updating),
                                 };
 
                                 return (
@@ -435,7 +545,6 @@ function Questionnaire(props) {
                     </CardContent>
 
                     <Separator className="my-8" />
-                    {/* {is_last && <div className="mb-8"></div>} */}
                   </Fragment>
                 );
               })}
@@ -463,10 +572,7 @@ function Questionnaire(props) {
                     className="w-full"
                     disabled={
                       is_submitting ||
-                      (!form.formState.isDirty &&
-                        !Object.keys(form.formState.touchedFields).length ===
-                          0 &&
-                        !form.formState.isValid)
+                      !Object.keys(form.formState.dirtyFields).length > 0
                     }
                   >
                     {is_submitting ? (
@@ -478,6 +584,44 @@ function Questionnaire(props) {
                       "Submit"
                     )}
                   </Button>
+                )}
+
+                {allow_updating && (
+                  <Fragment>
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="w-full mb-2"
+                      disabled={
+                        is_submitting ||
+                        !Object.keys(form.formState.dirtyFields).length > 0
+                      }
+                      onClick={() => console.log(form.formState.dirtyFields)}
+                    >
+                      {is_submitting ? (
+                        <>
+                          <Loader2 className="animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        "Save changes"
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="lg"
+                      className="w-full"
+                      variant="outline"
+                      disabled={
+                        is_submitting ||
+                        !Object.keys(form.formState.dirtyFields).length > 0
+                      }
+                      onClick={() => form.reset()}
+                    >
+                      Clear changes
+                    </Button>
+                  </Fragment>
                 )}
 
                 {error_message && (
@@ -495,6 +639,8 @@ function Questionnaire(props) {
           </form>
         </Form>
       </Card>
+
+      {questionnaire_timestamp}
     </Fragment>
   );
 }

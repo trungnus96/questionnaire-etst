@@ -9,7 +9,9 @@ import {
 // icons
 import { CheckCircle2 } from "lucide-react";
 
-function QuestionnaireSuccessMessage() {
+function QuestionnaireSuccessMessage(props = {}) {
+  const { message = "" } = props;
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md text-center">
@@ -18,9 +20,7 @@ function QuestionnaireSuccessMessage() {
             <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
           </div>
           <CardTitle className="text-xl">Thank You!</CardTitle>
-          <CardDescription>
-            Your responses have been submitted successfully.
-          </CardDescription>
+          <CardDescription>{message}</CardDescription>
         </CardHeader>
       </Card>
     </div>

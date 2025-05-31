@@ -32,6 +32,20 @@ export async function submitQuestionnaireResponse(payload = {}) {
   };
 }
 
+export async function updateQuestionnaireResponse(payload = {}) {
+  const { data = {}, error_message = "" } = await makeAnAsyncRequest({
+    name: "Update Questionnaire Response",
+    is_check_success: false,
+    requestFunction: BrauzApi.updateQuestionnaireResponse,
+    payload,
+  });
+
+  return {
+    error_message,
+    data: data || {},
+  };
+}
+
 export async function getQuestionnaireResponses(params = {}) {
   const { data = {}, error_message = "" } = await makeAnAsyncRequest({
     name: "Get Questionnaire Responses",

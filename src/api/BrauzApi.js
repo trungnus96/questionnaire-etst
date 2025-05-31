@@ -23,6 +23,17 @@ export async function submitQuestionnaireResponse(data = {}) {
   });
 }
 
+export async function updateQuestionnaireResponse(data = {}) {
+  const { g_id = "", ...rest } = data;
+  const url = `${BRAUZ_NETLIFY_API_V2}/thirdparty/questionnaire-responses/${g_id}`;
+
+  return createAxiosRequest({
+    url,
+    method: "PUT",
+    data: rest,
+  });
+}
+
 export async function getQuestionnaireResponses({ params = {} } = {}) {
   const url = `${BRAUZ_NETLIFY_API_V2}/thirdparty/questionnaire-responses`;
 
