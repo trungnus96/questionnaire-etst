@@ -499,7 +499,7 @@ function Questionnaire(props) {
                               <div
                                 key={key}
                                 dangerouslySetInnerHTML={{
-                                  __html: question.label,
+                                  __html: question.content,
                                 }}
                               ></div>
                             );

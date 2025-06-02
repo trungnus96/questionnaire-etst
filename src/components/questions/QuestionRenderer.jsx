@@ -88,7 +88,7 @@ const QuestionRenderer = (props = {}) => {
       <FormLabel className="leading-normal">
         <div>
           <div className="block font-semibold">
-            {index + 1}. {question.label}
+            {question.label}
             {question.is_required && (
               <span className="text-destructive ml-1">*</span>
             )}
