@@ -478,7 +478,7 @@ function Questionnaire(props) {
     <Fragment>
       {prefill_answer_alert}
 
-      <Card className="max-w-2xl mx-auto shadow-xl">
+      <Card className="max-w-2xl mx-auto shadow-xl text-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-semibold text-primary">
             {questionnaire.title}
