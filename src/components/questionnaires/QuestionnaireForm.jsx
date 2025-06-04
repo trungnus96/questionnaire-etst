@@ -54,6 +54,8 @@ const generateFormSchemaAndDefaults = ({
   questions.forEach((question = {}) => {
     let field_schema;
 
+    const prefilled_answer = prefilled_answers.get(question.id);
+
     // Base type
     switch (question.type) {
       case QuestionsConstants.QUESTION_TYPE_INPUT:
@@ -64,13 +66,21 @@ const generateFormSchemaAndDefaults = ({
         field_schema = z.string();
         default_values[question.id] = "";
 
+        // don't allow prefill if prefilled_answer is related to another submission and question.allow_prefill is false
         if (
-          question.allow_prefill &&
-          !isEmpty(prefilled_answers) &&
-          prefilled_answers[question.id] &&
-          prefilled_answers[question.id].length > 0
+          prefilled_answer &&
+          prefilled_answer.related_submitted_answer &&
+          !question.allow_prefill
         ) {
-          default_values[question.id] = prefilled_answers[question.id][0] || "";
+          break;
+        }
+
+        if (
+          prefilled_answer &&
+          prefilled_answer.value &&
+          prefilled_answer.value.length > 0
+        ) {
+          default_values[question.id] = prefilled_answer.value[0] || "";
         }
 
         break;
@@ -82,18 +92,26 @@ const generateFormSchemaAndDefaults = ({
         });
         default_values[question.id] = undefined; // Calendar expects undefined or Date
 
+        // don't allow prefill if prefilled_answer is related to another submission and question.allow_prefill is false
         if (
-          question.allow_prefill &&
-          !isEmpty(prefilled_answers) &&
-          prefilled_answers[question.id] &&
-          prefilled_answers[question.id].length > 0 &&
+          prefilled_answer &&
+          prefilled_answer.related_submitted_answer &&
+          !question.allow_prefill
+        ) {
+          break;
+        }
+
+        if (
+          prefilled_answer &&
+          prefilled_answer.value &&
+          prefilled_answer.value.length > 0 &&
           moment(
-            prefilled_answers[question.id][0],
+            prefilled_answer.value[0],
             question.date_format || ""
           ).isValid()
         ) {
           const moment_date = moment(
-            prefilled_answers[question.id][0],
+            prefilled_answer.value[0],
             question.date_format || ""
           );
 
@@ -106,13 +124,21 @@ const generateFormSchemaAndDefaults = ({
         field_schema = z.array(z.string());
         default_values[question.id] = [];
 
+        // don't allow prefill if prefilled_answer is related to another submission and question.allow_prefill is false
         if (
-          question.allow_prefill &&
-          !isEmpty(prefilled_answers) &&
-          prefilled_answers[question.id] &&
-          prefilled_answers[question.id].length > 0
+          prefilled_answer &&
+          prefilled_answer.related_submitted_answer &&
+          !question.allow_prefill
         ) {
-          default_values[question.id] = prefilled_answers[question.id] || [];
+          break;
+        }
+
+        if (
+          prefilled_answer &&
+          prefilled_answer.value &&
+          prefilled_answer.value.length > 0
+        ) {
+          default_values[question.id] = prefilled_answer.value || [];
         }
         break;
 
@@ -218,10 +244,10 @@ function Questionnaire(props) {
     sections = [],
     questions = [],
     is_submitted = false,
-    submitted_answers = {},
+    submitted_answers = new Map(),
     submitted_questionnaire_response = {},
     // related_questionnaire_response means the responses that are not related to the current corresponding_gid but are related to the same questionnaire for this customer
-    related_submitted_answers = {},
+    related_submitted_answers = new Map(),
     related_questionnaire_response = {},
     // update after submission
     allow_updating = false,
@@ -232,7 +258,7 @@ function Questionnaire(props) {
   const [submission_success, setSubmissionSuccess] = useState(false);
   const [error_message, setErrorMessage] = useState("");
   const [prefilled_answers, setPrefilledAnswers] = useState(
-    is_submitted ? submitted_answers : {}
+    is_submitted ? submitted_answers : new Map()
   );
   const [is_show_prefill_alert, setIsShowPrefillAlert] = useState(
     !is_submitted && !isEmpty(related_submitted_answers)

@@ -33,14 +33,19 @@ export function processQuestionnaireData({ questionnaire = {} }) {
 
 export function processSubmittedQuestionnaireResponse({
   questionnaire_response = {},
+  related_submitted_answer,
 } = {}) {
   const { answers = [] } = questionnaire_response;
 
-  let submitted_answers = {};
-  answers.forEach((answer) => {
+  const submitted_answers = new Map();
+
+  for (const answer of answers) {
     const { reference_id = "", value = [] } = answer;
-    submitted_answers[reference_id] = value.filter((v) => v);
-  });
+    submitted_answers.set(reference_id, {
+      value: value.filter((v) => v),
+      related_submitted_answer,
+    });
+  }
 
   return { submitted_answers };
 }

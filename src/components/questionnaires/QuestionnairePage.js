@@ -136,6 +136,7 @@ export default async function QuestionnairePage({
     const { submitted_answers: related_submitted_answers = {} } =
       processSubmittedQuestionnaireResponse({
         questionnaire_response: related_questionnaire_response,
+        related_submitted_answer: true,
       });
 
     const shared_props = {
