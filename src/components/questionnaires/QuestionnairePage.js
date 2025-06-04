@@ -5,7 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // components
-import Questionnaire from "@/components/Questionnaire";
+import QuestionnaireForm from "./QuestionnaireForm";
 
 // services
 import {
@@ -20,7 +20,10 @@ import {
   processSubmittedQuestionnaireResponse,
 } from "@/utilities/questionnaires";
 
-export default async function QuestionnairePage({ searchParams } = {}) {
+export default async function QuestionnairePage({
+  searchParams,
+  include_staff_only_items,
+} = {}) {
   const search_params = await searchParams;
 
   const {
@@ -50,6 +53,7 @@ export default async function QuestionnairePage({ searchParams } = {}) {
       active: true,
       page_size: 1,
       page_index: 0,
+      include_staff_only_items,
     });
 
   // get the questionnaire response if it exists
@@ -72,6 +76,7 @@ export default async function QuestionnairePage({ searchParams } = {}) {
       page_size: 1,
       page_index: 0,
       include_related_responses: true,
+      include_staff_only_items,
     });
 
     if (questionnaire_responses.length > 0) {
@@ -109,7 +114,7 @@ export default async function QuestionnairePage({ searchParams } = {}) {
     content = (
       <Alert className="max-w-lg m-auto" variant="destructive">
         <AlertTriangle className="h-5 w-5" />
-        <AlertTitle>Questionnaire Not Found</AlertTitle>
+        <AlertTitle>QuestionnaireForm Not Found</AlertTitle>
         <AlertDescription>
           The questionnaire you are looking for could not be found.
         </AlertDescription>
@@ -156,7 +161,7 @@ export default async function QuestionnairePage({ searchParams } = {}) {
       allow_updating: true,
     };
 
-    content = <Questionnaire {...shared_props} />;
+    content = <QuestionnaireForm {...shared_props} />;
   }
 
   return (

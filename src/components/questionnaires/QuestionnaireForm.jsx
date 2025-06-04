@@ -65,6 +65,7 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = "";
 
         if (
+          question.allow_prefill &&
           !isEmpty(prefilled_answers) &&
           prefilled_answers[question.id] &&
           prefilled_answers[question.id].length > 0
@@ -82,6 +83,7 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = undefined; // Calendar expects undefined or Date
 
         if (
+          question.allow_prefill &&
           !isEmpty(prefilled_answers) &&
           prefilled_answers[question.id] &&
           prefilled_answers[question.id].length > 0 &&
@@ -105,6 +107,7 @@ const generateFormSchemaAndDefaults = ({
         default_values[question.id] = [];
 
         if (
+          question.allow_prefill &&
           !isEmpty(prefilled_answers) &&
           prefilled_answers[question.id] &&
           prefilled_answers[question.id].length > 0
