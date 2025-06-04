@@ -510,7 +510,11 @@ function Questionnaire(props) {
                     <CardContent></CardContent>
 
                     <CardContent>
-                      <div className="text-md font-semibold mb-4">{title}</div>
+                      {title && (
+                        <div className="font-semibold mb-4 text-base">
+                          {title}
+                        </div>
+                      )}
 
                       {description && (
                         <div className="mb-4 text-sm">{description}</div>
